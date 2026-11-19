@@ -1,0 +1,1099 @@
+KUBERNETES + MINIKUBE + NAGIOS — SET 1 TO SET 9 REVISION FILE
+Based on the supplied SET papers and the Kubernetes/Nagios lab record.
+
+IMPORTANT SOURCE NOTE
+- The SET papers describe the Kubernetes tasks and expected replica counts. Several ask you to create a Deployment YAML but do not print a complete manifest.
+- The YAML examples below are ready-to-adapt templates that implement those stated requirements. Replace the image name, labels, ports, and replica count to match the question.
+- The Minikube/Nginx/Nagios command sequence is taken from the lab record. A SportSystem-specific sequence is also included from the completed SET-7 practical.
+
+======================================================================
+1. CORE KUBERNETES CONCEPTS
+======================================================================
+
+Kubernetes:
+- Platform for deploying, scaling, and managing containerized applications.
+- Maintains the desired number of application replicas and replaces failed Pods.
+
+Cluster:
+- A Kubernetes environment containing a control plane and worker node(s).
+
+Minikube:
+- A lightweight local Kubernetes cluster used for learning and practice.
+- In this lab, Minikube runs on the local Windows machine using Docker as its driver.
+
+Node:
+- A machine (physical or virtual) that runs Pods.
+
+Pod:
+- Smallest deployable unit in Kubernetes.
+- A Pod contains one or more closely related containers.
+
+Deployment:
+- Manages ReplicaSets and Pods.
+- Declares the desired number of replicas and supports rolling updates and rollbacks.
+
+Replica:
+- A running copy of the application Pod.
+- Example: replicas: 4 means Kubernetes tries to keep four Pods running.
+
+Service:
+- Provides a stable endpoint for reaching a group of Pods.
+- Selects Pods using labels and forwards traffic to matching Pods.
+- Useful because Pod IP addresses can change when Pods are recreated.
+
+NodePort:
+- Exposes a Service through a port on the Kubernetes node.
+
+LoadBalancer:
+- Exposes a Service through an external load balancer when the cluster environment supports it.
+
+======================================================================
+2. MINIKUBE INSTALLATION — WINDOWS POWERSHELL
+======================================================================
+
+Prerequisites:
+- Enable hardware virtualization.
+- Install Docker Desktop, or another supported hypervisor/driver.
+- Open PowerShell (Administrator when installing Minikube).
+
+Download Minikube installer (as shown in the lab record):
+
+curl.exe -LO https://storage.googleapis.com/minikube/releases/latest/minikube-installer.exe
+
+Run the installer:
+
+.\minikube-installer.exe
+
+If Minikube is not added to PATH:
+- Open System Properties -> Environment Variables.
+- Edit the PATH variable.
+- Add the Minikube installation directory (the lab record gives C:\Program Files\Minikube as an example).
+- Open a new terminal after changing PATH.
+
+Start Minikube with Docker driver:
+
+minikube start --driver=docker
+
+Verify Minikube:
+
+minikube status
+
+Check client version:
+
+minikube version
+kubectl version --client
+
+If kubectl is not installed separately, use Minikube's kubectl wrapper:
+
+minikube kubectl -- get pods -A
+
+Open dashboard (optional):
+
+minikube dashboard
+
+Troubleshoot Minikube startup:
+
+minikube logs
+
+Check for updates (optional):
+
+minikube update-check
+minikube update
+
+======================================================================
+3. STANDARD KUBERNETES PRACTICAL — NGINX EXAMPLE FROM THE LAB RECORD
+======================================================================
+
+Step 1 — Start the cluster:
+
+minikube start
+
+Step 2 — Create a Deployment:
+
+kubectl create deployment mynginx --image=nginx
+
+Verify:
+
+kubectl get deployments
+kubectl get pods
+kubectl describe pods
+
+If the Deployment already exists and you need to change its image, use:
+
+kubectl set image deployment/mynginx nginx=nginx:latest
+
+NOTE: The lab handout has a spelling inconsistency in one command (myngnix). Use the actual Deployment name, mynginx, consistently.
+
+Step 3 — Expose the Deployment as a NodePort Service:
+
+kubectl expose deployment mynginx --type=NodePort --port=80 --target-port=80
+
+Verify the Service:
+
+kubectl get services
+
+Step 4 — Scale to four replicas (as in the lab record):
+
+kubectl scale deployment mynginx --replicas=4
+
+Check Pods and Service:
+
+kubectl get pods
+kubectl get service mynginx
+
+Step 5 — Access using port forwarding:
+
+kubectl port-forward svc/mynginx 8081:80
+
+Open this URL in the browser:
+
+http://localhost:8081
+
+Alternative access using Minikube:
+
+minikube tunnel
+
+In another terminal, retrieve the URL:
+
+minikube service mynginx --url
+
+Open the URL returned by Minikube.
+
+Step 6 — Clean up:
+
+kubectl delete deployment mynginx
+kubectl delete service mynginx
+
+Optional: Stop Minikube:
+
+minikube stop
+
+Optional: Delete the Minikube cluster completely:
+
+minikube delete
+
+======================================================================
+4. DEPLOYMENT YAML — BASIC NGINX EXAMPLE
+======================================================================
+
+Save as deployment.yaml:
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mynginx
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: mynginx
+  template:
+    metadata:
+      labels:
+        app: mynginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+
+Save as service.yaml:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mynginx
+spec:
+  type: NodePort
+  selector:
+    app: mynginx
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+
+Apply both YAML files:
+
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+
+Verify:
+
+kubectl get deployments
+kubectl get pods
+kubectl get services
+
+Access:
+
+kubectl port-forward svc/mynginx 8081:80
+
+Browser: http://localhost:8081
+
+======================================================================
+5. JAVA / TOMCAT APPLICATION — DEPLOYMENT YAML TEMPLATE
+======================================================================
+
+Use this pattern when the question provides a Java/Tomcat Docker image that listens on port 8080.
+The image must already be accessible to the Minikube node (for a local image, use minikube image load).
+
+Save as sportssystem-deployment.yaml (change names/image to match the paper):
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sportssystem
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: sportssystem
+  template:
+    metadata:
+      labels:
+        app: sportssystem
+    spec:
+      containers:
+        - name: sportssystem
+          image: myapp:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+
+Save as sportssystem-service.yaml:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: sportssystem
+spec:
+  type: NodePort
+  selector:
+    app: sportssystem
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+
+Before creating the Deployment, load a locally built image into Minikube:
+
+docker build -t myapp:latest .
+minikube image load myapp:latest
+
+Apply and verify:
+
+kubectl apply -f sportssystem-deployment.yaml
+kubectl apply -f sportssystem-service.yaml
+kubectl get deployments
+kubectl get pods
+kubectl get services
+
+Access using port forwarding:
+
+kubectl port-forward svc/sportssystem 8082:8080
+
+Browser: http://localhost:8082
+
+IMPORTANT IMAGE NOTE:
+- imagePullPolicy: IfNotPresent tells Kubernetes to use the local image if it is already present.
+- For a locally loaded image tagged latest, Kubernetes may otherwise default to Always and try to pull it from a remote registry.
+- For a public image in a registry, use the correct image name/tag and the appropriate pull policy.
+
+======================================================================
+6. DOCKERFILES REQUIRED TO BUILD IMAGES FOR KUBERNETES
+======================================================================
+
+IMPORTANT CONCEPT:
+- Kubernetes does NOT read or execute a Dockerfile.
+- Dockerfile is used to build a Docker IMAGE.
+- Kubernetes Deployment YAML refers to that IMAGE using image: <image-name>:<tag>.
+- Build one image for the application, then set replicas: 2/3/4/5 as the question asks.
+- You do NOT create a separate Dockerfile for every Pod or replica.
+- If the question gives an already-published image (for example nginx:latest), no custom Dockerfile is needed.
+
+FIRST: CHECK WHAT YOUR MAVEN PROJECT GENERATES
+
+mvn clean package
+ls -lh target/
+
+If target contains a .war file, use the TOMCAT WAR Dockerfile (A).
+If target contains an executable .jar file, use the JAVA JAR Dockerfile (B).
+Do not guess the artifact name or copy a JAR as though it were a WAR.
+
+---------------------------------------------------------------------
+A. JAVA WEB APPLICATION THAT GENERATES A WAR — TOMCAT
+---------------------------------------------------------------------
+
+Use for a Maven web application intended to run on Tomcat.
+This is the usual pattern for a servlet/JSP web project when its POM uses:
+<packaging>war</packaging>
+
+Folder structure:
+ProjectFolder/
+  Dockerfile
+  pom.xml
+  src/
+  target/
+    application.war
+
+Dockerfile (simple version):
+
+FROM tomcat:9.0-jdk21-temurin
+COPY target/*.war /usr/local/tomcat/webapps/ROOT.war
+EXPOSE 8080
+
+What each line does:
+FROM     -> uses Tomcat 9 with Java 21.
+COPY     -> puts the generated WAR in Tomcat's webapps folder.
+EXPOSE   -> documents Tomcat's container port 8080.
+
+CMD is not required for this specific base image because the official Tomcat image already defines its startup command.
+If an exam question or supplied base image explicitly requires a startup command, you may include:
+CMD ["catalina.sh", "run"]
+
+Build the image (run from the project root, where Dockerfile is located):
+
+docker build -t mywebapp:latest .
+
+Load the local image into Minikube:
+
+minikube image load mywebapp:latest
+
+Use this in the Deployment container:
+
+image: mywebapp:latest
+imagePullPolicy: IfNotPresent
+ports:
+  - containerPort: 8080
+
+Examples of projects in the sets that may use this pattern IF their Maven POM generates a WAR:
+- SET 1 E-Ticketing
+- SET 2 Hospital Management System (HMS)
+- SET 3 Online Recruitment System (ORS)
+- SET 4 Online Shopping Application
+- SET 5 Gym application, only if its actual project is a Maven WAR
+- SET 7 Sports Management System
+- SET 9 Apartment Management System
+
+The set questions often specify the application and desired Kubernetes tasks but do not give the actual generated artifact filename. Always inspect target/ and adapt the Dockerfile to the real project.
+
+---------------------------------------------------------------------
+B. JAVA MAVEN APPLICATION THAT GENERATES AN EXECUTABLE JAR
+---------------------------------------------------------------------
+
+Use this when the Maven project generates an executable JAR and the application starts with java -jar.
+Do NOT use this for a normal WAR that needs Tomcat.
+
+Folder structure:
+ProjectFolder/
+  Dockerfile
+  pom.xml
+  src/
+  target/
+    application.jar
+
+Dockerfile:
+
+FROM openjdk:17-jdk-slim
+WORKDIR /app
+COPY target/application.jar /app/application.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/application.jar"]
+
+Replace application.jar with the exact JAR name shown inside target/.
+
+Build and load into Minikube:
+
+docker build -t myjavaapp:latest .
+minikube image load myjavaapp:latest
+
+Deployment container settings:
+
+image: myjavaapp:latest
+imagePullPolicy: IfNotPresent
+ports:
+  - containerPort: 8080
+
+SET 6 CEMS NOTE:
+The CEMS Docker question explicitly says to copy and run a JAR. Use this JAR pattern if that is the artifact produced by the given CEMS project. Verify the actual target/ filename and whether it is executable before using java -jar.
+
+---------------------------------------------------------------------
+C. SIMPLE STATIC WEBSITE / NGINX CUSTOM IMAGE
+---------------------------------------------------------------------
+
+Use this only when the application consists of static HTML/CSS/JavaScript files served by Nginx.
+
+Folder structure:
+ProjectFolder/
+  Dockerfile
+  index.html
+  style.css
+
+Dockerfile:
+
+FROM nginx:latest
+COPY . /usr/share/nginx/html/
+EXPOSE 80
+
+Build and load:
+
+docker build -t mysite:latest .
+minikube image load mysite:latest
+
+Deployment container port:
+
+ports:
+  - containerPort: 80
+
+If the question only asks you to deploy the official Nginx image, use image: nginx:latest directly and skip this Dockerfile.
+
+---------------------------------------------------------------------
+D. MULTI-STAGE MAVEN BUILD + TOMCAT RUNTIME (OPTIONAL ADVANCED)
+---------------------------------------------------------------------
+
+Use when you want Docker to build the WAR inside a Maven stage, then copy only the WAR into Tomcat.
+This is an optional optimized pattern; the simple WAR Dockerfile in A is easier for a timed lab exam when you have already run mvn clean package on the host.
+
+Dockerfile:
+
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package
+
+FROM tomcat:9.0-jdk21-temurin
+COPY --from=build /app/target/*.war /usr/local/tomcat/webapps/ROOT.war
+EXPOSE 8080
+
+Build:
+
+docker build -t mywebapp:latest .
+minikube image load mywebapp:latest
+
+IMPORTANT:
+- The Maven build stage needs all files required by your project (resources, additional modules, frontend files, etc.).
+- The simple WAR Dockerfile is safer when the WAR has already been generated and verified in target/.
+
+---------------------------------------------------------------------
+E. IMAGE BUILD + MINIKUBE LOAD — STANDARD WORKFLOW
+---------------------------------------------------------------------
+
+1. Build the application artifact (if Maven project):
+
+mvn clean package
+
+2. Confirm the artifact exists:
+
+ls -lh target/
+
+3. Create the Dockerfile in the project root (same level as pom.xml).
+
+4. Build the image:
+
+docker build -t myapp:latest .
+
+5. Send the image into Minikube's image store:
+
+minikube image load myapp:latest
+
+6. Verify the image is available in Minikube:
+
+minikube image ls
+
+7. Reference the same exact image name and tag in the Deployment YAML:
+
+image: myapp:latest
+imagePullPolicy: IfNotPresent
+
+8. Apply and verify:
+
+kubectl apply -f deployment.yaml
+kubectl get pods
+kubectl describe pod <pod-name>
+
+IMAGE POLICY — IMPORTANT:
+- imagePullPolicy: IfNotPresent: use the local image if it exists; pull only if it is missing.
+- imagePullPolicy: Always: always check/pull the image from a registry.
+- For a locally loaded image with no matching remote repository, use IfNotPresent (or Never where appropriate).
+- Keep the image name and tag identical in docker build, minikube image load, and Deployment YAML.
+
+WHAT DOES NOT NEED A CUSTOM DOCKERFILE?
+- The basic lab's nginx:latest example can use the official Nginx image directly.
+- Redis can use redis:alpine directly.
+- Nagios in the lab uses jasonrivers/nagios:latest directly.
+- A database such as postgres:15 can use the official image directly.
+- Only write a Dockerfile when you need to package your own application or create a customized image.
+
+======================================================================
+7. UNIVERSAL YAML TEMPLATE — CHANGE THESE VALUES FOR THE QUESTION
+======================================================================
+
+Deployment:
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <deployment-name>
+spec:
+  replicas: <number-of-replicas>
+  selector:
+    matchLabels:
+      app: <app-label>
+  template:
+    metadata:
+      labels:
+        app: <app-label>
+    spec:
+      containers:
+        - name: <container-name>
+          image: <image-name>:<tag>
+          ports:
+            - containerPort: <application-port>
+
+Service (NodePort):
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: <service-name>
+spec:
+  type: NodePort
+  selector:
+    app: <app-label>
+  ports:
+    - port: <service-port>
+      targetPort: <container-port>
+      protocol: TCP
+
+MOST IMPORTANT YAML MATCHING RULE:
+- Deployment template.metadata.labels.app must match Deployment selector.matchLabels.app.
+- Service selector.app must match the Pod label app.
+- Otherwise, the Service will not select the intended Pods.
+
+======================================================================
+8. KUBECTL COMMANDS — MUST MEMORIZE
+======================================================================
+
+Start cluster:
+minikube start --driver=docker
+
+Check cluster:
+minikube status
+kubectl get nodes
+
+Create Deployment quickly (imperative command):
+kubectl create deployment <name> --image=<image>
+
+Apply YAML:
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+
+List resources:
+kubectl get deployments
+kubectl get pods
+kubectl get services
+kubectl get all
+
+More Pod details:
+kubectl get pods -o wide
+kubectl describe pod <pod-name>
+
+Deployment details:
+kubectl describe deployment <deployment-name>
+
+EDIT AN EXISTING KUBERNETES RESOURCE (IMPORTANT — kubectl edit)
+--------------------------------------------------------------
+Edit a live Deployment:
+kubectl edit deployment <deployment-name>
+
+Edit a live Service:
+kubectl edit service <service-name>
+
+What it does:
+- Opens the live Kubernetes resource configuration in a text editor.
+- Change the required field, save the file, and close the editor.
+- Kubernetes applies the saved change to that resource.
+
+WINDOWS POWERSHELL — use Notepad as the editor:
+$env:KUBE_EDITOR="notepad"
+kubectl edit deployment <deployment-name>
+
+Example from the SET-7 SportSystem practical:
+$env:KUBE_EDITOR="notepad"
+kubectl edit deployment sportssystem
+
+One practical use — change imagePullPolicy for a locally loaded Minikube image:
+- In the Deployment editor, find the container's imagePullPolicy field.
+- Change imagePullPolicy: Always to imagePullPolicy: IfNotPresent when the image has already been loaded into Minikube and should be used locally.
+- Save and close Notepad. Then verify:
+  kubectl get pods
+  kubectl describe deployment sportssystem
+
+IMPORTANT:
+- Use the exact Deployment/Service name shown by kubectl get deployments or kubectl get services.
+- Do not change unrelated YAML fields.
+- If you only need to change the container image, kubectl set image is usually quicker; use kubectl edit when you need to change other resource settings.
+
+Scale a Deployment:
+kubectl scale deployment <deployment-name> --replicas=<number>
+
+Expose Deployment as NodePort:
+kubectl expose deployment <deployment-name> --type=NodePort --port=<service-port> --target-port=<container-port>
+
+Port-forward:
+kubectl port-forward svc/<service-name> <local-port>:<service-port>
+
+Delete one Pod (to demonstrate automatic recreation):
+kubectl delete pod <pod-name>
+
+Watch Pods:
+kubectl get pods -w
+
+Update container image:
+kubectl set image deployment/<deployment-name> <container-name>=<new-image>:<tag>
+
+Check rollout:
+kubectl rollout status deployment/<deployment-name>
+
+View rollout history:
+kubectl rollout history deployment/<deployment-name>
+
+Rollback to previous version:
+kubectl rollout undo deployment/<deployment-name>
+
+Delete Deployment and Service:
+kubectl delete deployment <deployment-name>
+kubectl delete service <service-name>
+
+Dashboard:
+minikube dashboard
+
+Minikube stop/delete:
+minikube stop
+minikube delete
+
+======================================================================
+9. REPLICA COUNTS ASKED IN SETS 1–9
+======================================================================
+
+SET 1 — E-Ticketing application:
+- Create a Deployment YAML with 2 replicas.
+- Expose using NodePort.
+- Scale from 2 to 5 replicas.
+- Delete a Pod and demonstrate automatic recreation.
+- Perform a rolling update and rollback.
+
+SET 2 — Hospital Management System (HMS):
+- Create a Deployment with 2 replicas.
+- Expose using NodePort or LoadBalancer.
+- Scale from 2 to 5 replicas.
+- Demonstrate Pod recreation after deletion.
+- Perform rolling update and rollback.
+
+SET 3 — Online Recruitment System (ORS):
+- Create a Deployment with 2 replicas.
+- Expose using NodePort.
+- Scale from 2 to 5 replicas.
+- Demonstrate automatic Pod recreation.
+- Perform rolling update and rollback.
+
+SET 4 — Online Shopping Application:
+- Make the application image available to Minikube.
+- Create 3 replicas.
+- Expose through a Service.
+- Scale from 3 to 5 replicas.
+- Delete a Pod and demonstrate automatic recreation.
+- Roll back a faulty update.
+
+SET 5 — Gym Membership Management System:
+- Make the application image available to Minikube.
+- Create 2 replicas.
+- Expose through a Service.
+- Scale from 2 to 5 replicas.
+- Delete a Pod and demonstrate automatic recreation.
+- Restore the previous version after an unsuccessful update.
+
+SET 6 — Vehicle Rental Management System:
+- Start Minikube and load/make the application image available.
+- Create 2 replicas.
+- Expose through a Service.
+- Scale from 2 to 4 replicas.
+- Delete a Pod and verify that Kubernetes creates a replacement.
+- Troubleshoot an image update that introduces an error.
+
+SET 7 — Sports Management System:
+- Start Minikube with Docker driver.
+- Create the SportSystem Deployment.
+- Scale replicas and expose with a Service.
+- Run Nagios in Docker.
+- The completed practical used 4 replicas, Service port/targetPort 8080, and port-forward 8082:8080.
+
+SET 8 — Blood Bank Management System:
+- Initialize Minikube and manage Deployment/Pod lifecycle.
+- Run Nagios and review its host/service dashboard.
+- Practice debugging failed Deployments, rolling back and debugging running Pods.
+
+SET 9 — Apartment Management System:
+- Start Minikube.
+- Create the Deployment with 4 replicas.
+- Expose through a Service and scale as required.
+- Pull and run Nagios.
+- Practice port-forwarding if NodePort access is unavailable.
+
+NOTE: Replica counts are question-specific. Read the number in the current paper rather than always using 4.
+
+======================================================================
+9. SCALING, AUTO-RECOVERY, SERVICE, UPDATE AND ROLLBACK
+======================================================================
+
+A. Manual scaling
+
+Example: scale a Deployment to 5 replicas:
+
+kubectl scale deployment myapp --replicas=5
+kubectl get pods
+
+The Deployment controller tries to maintain the requested number of replicas.
+
+B. Automatic Pod recreation
+
+1. List Pods:
+
+kubectl get pods
+
+2. Delete one running Pod:
+
+kubectl delete pod <pod-name>
+
+3. Watch the Pods:
+
+kubectl get pods -w
+
+Expected concept:
+- The Deployment/ReplicaSet notices that the number of Pods is below the desired replica count.
+- It creates a replacement Pod.
+- The replacement Pod usually receives a new Pod name and IP address.
+
+C. Service stability
+
+- A Pod's IP can change when it is recreated.
+- A Service provides a stable endpoint and forwards requests to matching ready Pods.
+- The Service selector must match the labels on the Deployment's Pods.
+
+D. Rolling update
+
+Update the image used by a Deployment:
+
+kubectl set image deployment/myapp myapp=myimage:v2
+
+Check whether the update completed:
+
+kubectl rollout status deployment/myapp
+
+E. Rollback
+
+View rollout history:
+
+kubectl rollout history deployment/myapp
+
+Undo the latest rollout:
+
+kubectl rollout undo deployment/myapp
+
+Check status:
+
+kubectl rollout status deployment/myapp
+
+F. Manual scaling vs Horizontal Pod Autoscaler (HPA)
+
+Manual scaling:
+- Administrator chooses the replica count with kubectl scale.
+
+HPA:
+- Kubernetes adjusts the replica count automatically based on configured metrics, such as CPU utilization.
+- It requires the relevant metrics support and resource configuration.
+
+Optional HPA command pattern:
+
+kubectl autoscale deployment myapp --cpu-percent=50 --min=2 --max=10
+kubectl get hpa
+
+Use the CPU target and minimum/maximum values specified by the question; 50, 2 and 10 above are only example values.
+
+======================================================================
+10. TROUBLESHOOTING — SET 7 / SET 8 / SET 9 SCENARIOS
+======================================================================
+
+A. CrashLoopBackOff — Pod keeps restarting
+
+Commands:
+
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl logs <pod-name> --previous
+
+Check:
+- Application startup errors.
+- Wrong command or arguments.
+- Missing environment variables or configuration.
+- Incorrect image or application port.
+- Failed liveness/readiness checks.
+
+B. Pod stuck in Pending
+
+Commands:
+
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl get nodes
+kubectl get events --sort-by=.metadata.creationTimestamp
+
+Possible reasons:
+- Insufficient CPU or memory on available nodes.
+- Node is unavailable or not ready.
+- PersistentVolumeClaim/storage cannot be satisfied.
+- Scheduling constraints or taints/tolerations prevent placement.
+
+C. Pods failing health checks
+
+Commands:
+
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+
+Check:
+- Readiness and liveness probe path, port and timing.
+- Whether the application is listening on the configured port.
+- Whether resource limits are too low.
+- Whether the application has finished starting before the probe runs.
+
+D. General running Pod debugging
+
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+kubectl exec -it <pod-name> -- sh
+
+Use kubectl exec only if the container has a shell available.
+
+E. Failed Deployment / incorrect image
+
+kubectl get deployments
+kubectl get pods
+kubectl describe deployment <deployment-name>
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+
+Check the image name/tag, image pull status, container port and application logs.
+
+F. Pod IP vs Service IP
+
+- Pod IP: address assigned to an individual Pod; it can change when the Pod is recreated.
+- Service IP: stable virtual IP for the Service; traffic is forwarded to selected Pods.
+
+======================================================================
+11. NAGIOS — DOCKER COMMANDS FROM THE LAB RECORD
+======================================================================
+
+Step 1 — Pull Nagios image:
+
+docker pull jasonrivers/nagios:latest
+
+Step 2 — Run Nagios:
+
+docker run --name nagiosdemo -p 8888:80 jasonrivers/nagios:latest
+
+To run in detached/background mode instead:
+
+docker run -d --name nagiosdemo -p 8888:80 jasonrivers/nagios:latest
+
+Step 3 — Open dashboard:
+
+http://localhost:8888
+
+Login (as specified in the lab record):
+
+Username: nagiosadmin
+Password: nagios
+
+Dashboard areas:
+- Hosts: systems being monitored.
+- Services: checks such as CPU/service status.
+- Alerts: recent notifications.
+
+Check Nagios container:
+
+docker ps
+docker logs nagiosdemo
+
+Follow logs continuously:
+
+docker logs -f nagiosdemo
+
+Stop and start Nagios:
+
+docker stop nagiosdemo
+docker start nagiosdemo
+
+======================================================================
+12. NAGIOS SCENARIO ANSWERS
+======================================================================
+
+A. Nagios web interface says "Unable to connect to Nagios process".
+
+1. Check whether the container is running:
+   docker ps
+2. Start it if stopped:
+   docker start nagiosdemo
+3. Inspect logs:
+   docker logs nagiosdemo
+4. Verify the Nagios process and configuration inside the container.
+5. Correct configuration errors and restart the container if needed.
+
+B. New host is not appearing in Nagios UI.
+
+1. Verify that the host configuration file exists.
+2. Check that the host definition has the correct name/address.
+3. Check that the host configuration is included in the main Nagios configuration.
+4. Validate the Nagios configuration and correct errors.
+5. Reload/restart Nagios.
+6. Refresh the Hosts page in the web interface.
+
+C. What does Nagios monitor?
+
+- CPU utilization.
+- Memory usage.
+- Disk space.
+- Server uptime.
+- HTTP/application availability.
+- Database/service availability.
+- Network devices and services.
+
+D. WARNING vs CRITICAL
+
+- WARNING: A monitored metric/service has crossed its warning threshold or is degraded.
+- CRITICAL: A more serious threshold has been reached or a monitored service is unavailable.
+- Administrators investigate and resolve the root cause, then verify recovery in the dashboard.
+
+NOTE: The lab practical pulls and runs the Nagios container and opens its dashboard. A real host/service monitoring configuration requires defining the relevant host/service checks; simply running the container does not automatically configure every application check described in the scenario questions.
+
+======================================================================
+13. QUICK EXAM ANSWERS — COMMON KUBERNETES SCENARIOS
+======================================================================
+
+Q: What happens when a Pod crashes?
+A: The controller notices that the actual Pod count is below the desired replica count and creates a replacement Pod.
+
+Q: Why specify replicas in a Deployment?
+A: It declares how many copies of the application should be kept running.
+
+Q: Why use a Service?
+A: It provides a stable endpoint and forwards traffic to the matching Pods even when Pod IP addresses change.
+
+Q: What is the difference between manual scaling and HPA?
+A: Manual scaling uses a chosen replica count. HPA adjusts replicas automatically according to configured metrics and limits.
+
+Q: How do you expose an application in Minikube?
+A: Create a NodePort or other suitable Service, or use kubectl port-forward for local access.
+
+Q: How do you verify Pods?
+A:
+
+kubectl get pods
+
+Q: How do you debug a running Pod?
+A:
+
+kubectl describe pod <pod-name>
+kubectl logs <pod-name>
+
+Q: How do you undo a faulty update?
+A:
+
+kubectl rollout undo deployment/<deployment-name>
+
+======================================================================
+14. COMMON EXAM WORKFLOW — MEMORIZE THIS ORDER
+======================================================================
+
+1. Start Minikube:
+   minikube start --driver=docker
+
+2. Verify:
+   minikube status
+   kubectl get nodes
+
+3. Make the image available (if it is a locally built application):
+   docker build -t myapp:latest .
+   minikube image load myapp:latest
+
+4. Create Deployment:
+   kubectl create deployment myapp --image=myapp:latest
+   OR apply a Deployment YAML:
+   kubectl apply -f deployment.yaml
+
+5. Verify:
+   kubectl get deployments
+   kubectl get pods
+
+6. Expose the Deployment:
+   kubectl expose deployment myapp --type=NodePort --port=8080 --target-port=8080
+   OR apply a Service YAML:
+   kubectl apply -f service.yaml
+
+7. Scale:
+   kubectl scale deployment myapp --replicas=4
+
+8. Verify:
+   kubectl get pods
+   kubectl get services
+
+9. Access locally:
+   kubectl port-forward svc/myapp 8082:8080
+
+10. Demonstrate automatic Pod recreation:
+    kubectl delete pod <pod-name>
+    kubectl get pods -w
+
+11. Update / rollback (when asked):
+    kubectl set image deployment/myapp myapp=myimage:v2
+    kubectl rollout status deployment/myapp
+    kubectl rollout undo deployment/myapp
+
+12. Nagios:
+    docker pull jasonrivers/nagios:latest
+    docker run --name nagiosdemo -p 8888:80 jasonrivers/nagios:latest
+
+13. Clean up (when asked):
+    kubectl delete deployment myapp
+    kubectl delete service myapp
+    minikube stop
+
+======================================================================
+15. PORTS — DO NOT MIX THEM UP
+======================================================================
+
+For the Nginx lab:
+- Container port: 80.
+- Service port: 80.
+- Port-forward example: 8081:80.
+- Browser: http://localhost:8081.
+
+For the SportSystem/Tomcat practical:
+- Container port: 8080.
+- Service port: 8080.
+- Port-forward example: 8082:8080.
+- Browser: http://localhost:8082.
+
+Port-forward format:
+
+kubectl port-forward svc/<service-name> LOCAL_PORT:SERVICE_PORT
+
+The left-side port is on your Windows machine. The right-side port is the Service port in Kubernetes.
+
+======================================================================
+END OF KUBERNETES + MINIKUBE + NAGIOS REVISION FILE
+======================================================================
