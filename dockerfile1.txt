@@ -1,0 +1,484 @@
+DOCKERFILE + DOCKER COMPOSE COLLECTION
+Combined revision file for Software Engineering Lab Sets 1–9
+
+PURPOSE
+-------
+This file collects the Dockerfile patterns and Docker Compose YAML examples relevant to the nine supplied set papers and the Week 5/Week 6 Docker lab handouts.
+
+IMPORTANT SOURCE NOTE
+--------------------
+Some set papers specify what the Dockerfile or Compose setup must achieve, but do not print a complete file. In those cases, the code below is an exam-ready solution template based on the requirements. Replace example image names, artifact names, passwords, ports, and paths with the values given in the actual question/POM/project.
+
+SET-WISE COVERAGE
+-----------------
+SET 1: Hospital Management System (HMS) single-container Dockerfile.
+SET 2: HMS multi-container setup with custom network and persistent database volume.
+SET 3: Online Recruitment System (ORS) WAR/Tomcat Dockerfile.
+SET 4: Hotel Reservation System (HRS) WAR/Tomcat Dockerfile.
+SET 5: Gym portal using WordPress + MySQL Compose.
+SET 6: Campus Event Management System (CEMS) JAR Dockerfile.
+SET 7: SportsSystem Docker/Compose practical; Flask + PostgreSQL + Redis Compose; also includes the Apartment Management JAR Dockerfile pattern from the earlier Set-7 answer material.
+SET 8: Blood Bank frontend + PostgreSQL Compose.
+SET 9: Apartment Community Portal Compose and AWS/Tomcat Docker deployment pattern.
+
+============================================================
+PART A — DOCKERFILES
+============================================================
+
+1. REDIS DOCKERFILE (WEEK 5 SINGLE-CONTAINER LAB)
+-------------------------------------------------
+File name: Dockerfile
+
+FROM redis:latest
+CMD ["redis-server"]
+
+
+2. COMMON JAVA WEB APPLICATION — WAR + TOMCAT
+---------------------------------------------
+Use this pattern for the HMS (Set 1), ORS (Set 3), and HRS (Set 4) web applications when the Maven project produces a WAR file and the question expects deployment on Tomcat.
+
+File name: Dockerfile
+
+FROM tomcat:9.0
+COPY target/*.war /usr/local/tomcat/webapps/ROOT.war
+EXPOSE 8080
+CMD ["catalina.sh", "run"]
+
+NOTES:
+- Build the Maven project first so that target/ contains the WAR file.
+- The source of COPY is in your project/build context.
+- The destination is inside the Tomcat image.
+- Tomcat deploys WAR files placed in webapps/.
+- ROOT.war makes the application available at the root context path (/).
+- If the question gives an exact WAR filename, you may use target/ExactName.war instead of target/*.war.
+- The official Tomcat image already has a default startup command; the explicit CMD above is retained because it appears in the lab-record style. It can be omitted when relying on the image's default command.
+
+
+3. CEMS / JAVA APPLICATION — JAR + JAVA RUNTIME (SET 6)
+-------------------------------------------------------
+Use this pattern when the Maven project produces an executable JAR (not a WAR deployed to Tomcat).
+
+File name: Dockerfile
+
+FROM openjdk:17-jdk-slim
+WORKDIR /app
+COPY target/*.jar /app/app.jar
+EXPOSE 8080
+CMD ["java", "-jar", "/app/app.jar"]
+
+NOTES:
+- Confirm the generated JAR filename in target/ before writing COPY.
+- This example assumes the JAR is executable and starts the web application itself.
+- If the project produces a WAR, use the Tomcat Dockerfile above instead.
+
+
+4. APARTMENT MANAGEMENT SYSTEM — JAVA JAR (EARLIER SET-7 ANSWER PATTERN)
+-------------------------------------------------------------------------
+File name: Dockerfile
+
+FROM openjdk:17-jdk-slim
+WORKDIR /app
+COPY target/apartment-management.jar /app/apartment-management.jar
+EXPOSE 8080
+CMD ["java", "-jar", "/app/apartment-management.jar"]
+
+NOTE: The question-wise answer material names target/apartment-management.jar. If your actual Maven build creates a differently named JAR, change the COPY source and CMD path to match it.
+
+
+5. SPORTSYSTEM — WAR + TOMCAT (CURRENT PRACTICAL)
+-------------------------------------------------
+File name: Dockerfile
+
+FROM tomcat:9.0-jdk21-temurin
+COPY target/*.war /usr/local/tomcat/webapps/ROOT.war
+EXPOSE 8080
+
+NOTES:
+- This is the version used in the EC2/SportsSystem practical with Java 21 and Tomcat 9.
+- The container listens on port 8080. The host port is selected in docker run, e.g. -p 6060:8080.
+- No CMD is required here because this Tomcat base image already supplies its startup command.
+
+
+6. FLASK APP DOCKERFILE (WEEK 6 DOCKER COMPOSE LAB / SET-7 COMPOSE WEB SERVICE)
+-------------------------------------------------------------------------------
+File name: Dockerfile
+
+FROM python:3.10-slim
+WORKDIR /app
+COPY app.py /app/
+RUN pip install flask
+CMD ["python", "app.py"]
+
+Expected app.py example from the lab handout:
+
+from flask import Flask
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Hello from Flask + Docker!"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+
+
+7. OPTIONAL — MULTI-STAGE MAVEN BUILD + TOMCAT RUNTIME
+------------------------------------------------------
+This is an optimization pattern for a Maven WAR application. It builds the WAR in a Maven stage and copies only the generated artifact into the Tomcat runtime stage.
+
+File name: Dockerfile
+
+FROM maven:3.9-eclipse-temurin-17 AS build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package
+
+FROM tomcat:9.0
+COPY --from=build /app/target/*.war /usr/local/tomcat/webapps/ROOT.war
+EXPOSE 8080
+CMD ["catalina.sh", "run"]
+
+NOTE: Use a Java version compatible with the project. If the project already builds the WAR outside Docker, the simpler Tomcat Dockerfile in section 2 is enough.
+
+============================================================
+PART B — DOCKER COMPOSE FILES
+============================================================
+
+COMPOSE FILE QUICK RULES
+-----------------------
+- Save the YAML as docker-compose.yml (or compose.yaml) in the project folder.
+- Each service represents a container.
+- ports uses HOST_PORT:CONTAINER_PORT.
+- depends_on controls startup order; it does not by itself guarantee that a database is ready to accept connections.
+- networks allow services to communicate by service name.
+- volumes preserve database data outside the container lifecycle.
+- The examples retain version: "3.9" where the set/record asks for it. Newer Docker Compose versions may warn that the version field is obsolete; it can be removed without changing the services definition.
+
+
+1. BASIC NGINX + POSTGRESQL (WEEK 6 COMPOSE LAB)
+------------------------------------------------
+File name: docker-compose.yml
+
+version: "3.9"
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo_db
+
+
+2. NGINX + POSTGRESQL + REDIS (WEEK 6 COMPOSE LAB)
+--------------------------------------------------
+File name: docker-compose.yml
+
+version: "3.9"
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    depends_on:
+      - redis
+      - db
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo_db
+
+  redis:
+    image: redis:alpine
+
+
+3. NGINX + POSTGRESQL WITH CUSTOM NETWORK AND PERSISTENT VOLUME (WEEK 6 LAB)
+----------------------------------------------------------------------------
+File name: docker-compose.yml
+
+version: "3.9"
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    networks:
+      - app-net
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo_db
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - app-net
+
+networks:
+  app-net:
+
+volumes:
+  db-data:
+
+
+4. WORDPRESS + MYSQL (SET 5 GYM PORTAL; ALSO WEEK 6 LAB EXAMPLE)
+-----------------------------------------------------------------
+File name: docker-compose.yml
+
+version: "3.8"
+services:
+  wordpress:
+    image: wordpress:latest
+    ports:
+      - "8081:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    depends_on:
+      - db
+    networks:
+      - gym-net
+
+  db:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - gym-net
+
+networks:
+  gym-net:
+
+volumes:
+  mysql-data:
+
+NOTES:
+- Set 5 asks for WordPress + MySQL, a custom network, and persistent MySQL data.
+- Keep the WordPress DB environment values aligned with the MySQL environment values.
+- Do not publish the MySQL port publicly unless the question specifically requires it.
+
+
+5. HMS WEB APPLICATION + POSTGRESQL (SET 2 SOLUTION TEMPLATE)
+-------------------------------------------------------------
+File name: docker-compose.yml
+
+version: "3.9"
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: hms_db
+      DB_USER: hms_user
+      DB_PASSWORD: change_this_password
+    depends_on:
+      - db
+    networks:
+      - hms-net
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: hms_db
+      POSTGRES_USER: hms_user
+      POSTGRES_PASSWORD: change_this_password
+    volumes:
+      - hms-data:/var/lib/postgresql/data
+    networks:
+      - hms-net
+
+networks:
+  hms-net:
+
+volumes:
+  hms-data:
+
+NOTES:
+- This is a solution template for Set 2's HMS web + database requirement. The set allows PostgreSQL/MySQL and does not prescribe exact environment-variable names or a backend image.
+- build: . assumes the HMS Dockerfile is in the same folder. Change the DB environment variable names to whatever the actual HMS application expects.
+- For MySQL instead, use a MySQL image and MYSQL_DATABASE / MYSQL_USER / MYSQL_PASSWORD environment variables, and mount a named volume at /var/lib/mysql.
+
+
+6. FLASK + POSTGRESQL + REDIS (SET 7 / WEEK 6 FASTER-ITERATION LAB)
+--------------------------------------------------------------------
+File name: docker-compose.yml
+
+version: "3.9"
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - app-net
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: sportsdb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - app-net
+
+  redis:
+    image: redis:alpine
+    networks:
+      - app-net
+
+networks:
+  app-net:
+
+volumes:
+  db-data:
+
+NOTES:
+- The web service is built from the Dockerfile in the current folder (section A.6).
+- The web service can reach the database at hostname db and Redis at hostname redis.
+- The set/lab requirements are Flask web + PostgreSQL + Redis, depends_on, custom network, persistent DB volume, rebuild and scaling.
+
+
+7. BLOOD BANK FRONTEND + POSTGRESQL (SET 8 SOLUTION TEMPLATE)
+-------------------------------------------------------------
+File name: docker-compose.yml
+
+version: "3.9"
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    networks:
+      - bloodbank-net
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: bloodbank
+      POSTGRES_USER: bloodbank_user
+      POSTGRES_PASSWORD: change_this_password
+    volumes:
+      - bloodbank-data:/var/lib/postgresql/data
+    networks:
+      - bloodbank-net
+
+networks:
+  bloodbank-net:
+
+volumes:
+  bloodbank-data:
+
+NOTE: Set 8 specifies a web frontend, PostgreSQL backend, network, and persistent storage but does not prescribe the web image or DB variable names. Replace nginx:latest with the actual frontend image/build if the application code is supplied.
+
+
+8. APARTMENT COMMUNITY PORTAL + POSTGRESQL (SET 9 SOLUTION TEMPLATE)
+---------------------------------------------------------------------
+File name: docker-compose.yml
+
+version: "3.9"
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    networks:
+      - apartment-net
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: apartment_db
+      POSTGRES_USER: apartment_user
+      POSTGRES_PASSWORD: change_this_password
+    volumes:
+      - apartment-data:/var/lib/postgresql/data
+    networks:
+      - apartment-net
+
+networks:
+  apartment-net:
+
+volumes:
+  apartment-data:
+
+NOTES:
+- Set 9 specifically asks for a web service (Nginx/Tomcat), PostgreSQL 15, custom networking, and persistent storage.
+- This version uses Nginx on container port 80. If using Tomcat instead, use a Tomcat image and map the Tomcat container port (usually 8080), for example "8080:8080".
+
+============================================================
+PART C — IMPORTANT DIFFERENCES / QUICK REMINDERS
+============================================================
+
+1. JAR APPLICATION vs WAR APPLICATION
+- JAR executable application: use a Java runtime image, copy the JAR, and start it with java -jar.
+- WAR web application: use a Tomcat image and copy the WAR into /usr/local/tomcat/webapps/.
+
+2. COPY SYNTAX
+COPY <source-in-project-folder> <destination-inside-image>
+The COPY instruction needs BOTH a source and a destination.
+
+3. PORTS
+- EXPOSE 8080 documents the container port.
+- docker run -p 6060:8080 maps host port 6060 to container port 8080.
+- Compose ports follows the same HOST:CONTAINER format, e.g. "5000:5000" or "8080:80".
+
+4. DOCKER COMPOSE COMMANDS
+- docker compose up -d
+- docker compose up --build -d
+- docker compose ps
+- docker compose logs
+- docker compose down
+- docker compose down -v   (also removes named volumes; use carefully)
+- docker compose up --scale web=2 -d
+- docker compose up -d --no-deps --build web   (rebuild only web service)
+
+5. DOCKERFILE COMMANDS
+- docker build -t <image-name> .
+- docker images
+- docker run -d --name <container-name> -p <host-port>:<container-port> <image-name>
+- docker ps
+- docker ps -a
+- docker logs <container-name>
+- docker exec -it <container-name> /bin/sh
+- docker stop <container-name>
+- docker start <container-name>
+
+6. EXAM CHECKS BEFORE BUILDING
+- Confirm whether the Maven project produces a JAR or WAR.
+- Check the exact generated artifact name using ls target/ (Linux/Mac) or dir target (Windows).
+- Ensure the Dockerfile is in the directory used as the build context.
+- Ensure the COPY source exists and is not excluded by .dockerignore.
+- Use lowercase image names, e.g. docker build -t hms .
+
+END OF FILE
